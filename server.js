@@ -21,7 +21,7 @@ app.get("/manifest.json", (req, res) => {
     version: "1.0.0",
     name: "YouTube Central",
     description:
-      "General-purpose YouTube search addon for Nuvio/Stremio.",
+      "General-purpose YouTube search addon for Nuvio and Stremio.",
 
     resources: [
       "catalog",
@@ -29,15 +29,14 @@ app.get("/manifest.json", (req, res) => {
     ],
 
     types: [
-      "movie",
-      "series"
+      "movie"
     ],
 
     catalogs: [
       {
         type: "movie",
         id: "youtube_search",
-        name: "▶️ YouTube",
+        name: "YouTube",
         extra: [
           {
             name: "search",
@@ -54,7 +53,7 @@ app.get("/manifest.json", (req, res) => {
 });
 
 // --------------------------------------------------
-// YouTube Search
+// Search YouTube
 // --------------------------------------------------
 
 app.get(
@@ -74,12 +73,13 @@ app.get(
           "YOUTUBE_API_KEY is not configured."
         );
 
-        return res.status(500).json({
+        return res.json({
           metas: []
         });
       }
 
-      const url = new URL(YOUTUBE_SEARCH_URL);
+      const url =
+        new URL(YOUTUBE_SEARCH_URL);
 
       url.searchParams.set(
         "part",
@@ -102,18 +102,12 @@ app.get(
       );
 
       url.searchParams.set(
-        "safeSearch",
-        "none"
-      );
-
-      url.searchParams.set(
         "key",
         YOUTUBE_API_KEY
       );
 
-      const response = await fetch(
-        url.toString()
-      );
+      const response =
+        await fetch(url.toString());
 
       if (!response.ok) {
         const errorText =
@@ -133,8 +127,9 @@ app.get(
         await response.json();
 
       const metas =
-        (data.items || []).map(
-          (item) => {
+        (data.items || [])
+          .map((item) => {
+
             const videoId =
               item.id &&
               item.id.videoId;
@@ -145,14 +140,6 @@ app.get(
 
             const snippet =
               item.snippet || {};
-
-            const title =
-              snippet.title ||
-              "YouTube Video";
-
-            const description =
-              snippet.description ||
-              "";
 
             const thumbnail =
               snippet.thumbnails?.high?.url ||
@@ -165,13 +152,17 @@ app.get(
 
               type: "movie",
 
-              name: title,
+              name:
+                snippet.title ||
+                "YouTube Video",
 
               poster: thumbnail,
 
               background: thumbnail,
 
-              description,
+              description:
+                snippet.description ||
+                "",
 
               releaseInfo:
                 snippet.publishedAt
@@ -179,18 +170,16 @@ app.get(
                       0,
                       10
                     )
-                  : undefined,
-
-              runtime: "YouTube",
+                  : "",
 
               genres: [
                 "YouTube"
               ]
             };
-          }
-        ).filter(Boolean);
+          })
+          .filter(Boolean);
 
-      res.json({
+      return res.json({
         metas
       });
 
@@ -201,7 +190,7 @@ app.get(
         error
       );
 
-      res.json({
+      return res.json({
         metas: []
       });
     }
@@ -217,13 +206,13 @@ app.get(
   async (req, res) => {
     try {
 
-      const rawId =
+      let videoId =
         req.params.id;
 
-      const videoId =
-        rawId.startsWith("yt:")
-          ? rawId.substring(3)
-          : rawId;
+      if (videoId.startsWith("yt:")) {
+        videoId =
+          videoId.substring(3);
+      }
 
       if (!YOUTUBE_API_KEY) {
         return res.json({
@@ -236,4 +225,124 @@ app.get(
 
       url.searchParams.set(
         "part",
-        "snippet
+        "snippet"
+      );
+
+      url.searchParams.set(
+        "id",
+        videoId
+      );
+
+      url.searchParams.set(
+        "key",
+        YOUTUBE_API_KEY
+      );
+
+      const response =
+        await fetch(url.toString());
+
+      if (!response.ok) {
+        return res.json({
+          meta: null
+        });
+      }
+
+      const data =
+        await response.json();
+
+      const video =
+        data.items &&
+        data.items[0];
+
+      if (!video) {
+        return res.json({
+          meta: null
+        });
+      }
+
+      const snippet =
+        video.snippet || {};
+
+      const thumbnail =
+        snippet.thumbnails?.high?.url ||
+        snippet.thumbnails?.medium?.url ||
+        snippet.thumbnails?.default?.url ||
+        null;
+
+      return res.json({
+        meta: {
+          id: `yt:${videoId}`,
+
+          type: "movie",
+
+          name:
+            snippet.title ||
+            "YouTube Video",
+
+          poster: thumbnail,
+
+          background: thumbnail,
+
+          description:
+            snippet.description ||
+            "",
+
+          releaseInfo:
+            snippet.publishedAt
+              ? snippet.publishedAt.substring(
+                  0,
+                  10
+                )
+              : "",
+
+          genres: [
+            "YouTube"
+          ],
+
+          director: [
+            snippet.channelTitle ||
+            "YouTube"
+          ],
+
+          website:
+            `https://www.youtube.com/watch?v=${videoId}`
+        }
+      });
+
+    } catch (error) {
+
+      console.error(
+        "Metadata error:",
+        error
+      );
+
+      return res.json({
+        meta: null
+      });
+    }
+  }
+);
+
+// --------------------------------------------------
+// Health check
+// --------------------------------------------------
+
+app.get("/", (req, res) => {
+  res.send(
+    "YouTube Central is running."
+  );
+});
+
+// --------------------------------------------------
+// Start server
+// --------------------------------------------------
+
+app.listen(
+  PORT,
+  "0.0.0.0",
+  () => {
+    console.log(
+      `YouTube Central listening on port ${PORT}`
+    );
+  }
+);
