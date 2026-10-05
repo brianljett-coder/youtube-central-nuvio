@@ -18,14 +18,19 @@ const YOUTUBE_VIDEO_URL =
 app.get("/manifest.json", (req, res) => {
   res.json({
     id: "com.youtube.central.nuvio",
-    version: "1.0.0",
+    version: "1.1.0",
     name: "YouTube Central",
     description:
-      "General-purpose YouTube search addon for Nuvio and Stremio.",
+      "General YouTube search addon for Nuvio and Stremio.",
 
     resources: [
       "catalog",
-      "meta"
+      "meta",
+      {
+        name: "stream",
+        types: ["movie"],
+        idPrefixes: ["yt:"]
+      }
     ],
 
     types: [
@@ -36,7 +41,7 @@ app.get("/manifest.json", (req, res) => {
       {
         type: "movie",
         id: "youtube_search",
-        name: "YouTube",
+        name: "YouTube Central",
         extra: [
           {
             name: "search",
@@ -48,19 +53,24 @@ app.get("/manifest.json", (req, res) => {
 
     idPrefixes: [
       "yt:"
-    ]
+    ],
+
+    behaviorHints: {
+      configurable: false
+    }
   });
 });
 
 // --------------------------------------------------
-// Search YouTube
+// YouTube Search
 // --------------------------------------------------
 
 app.get(
   "/catalog/:type/:id.json",
   async (req, res) => {
     try {
-      const search = req.query.search;
+      const search =
+        req.query.search;
 
       if (!search) {
         return res.json({
@@ -70,7 +80,7 @@ app.get(
 
       if (!YOUTUBE_API_KEY) {
         console.error(
-          "YOUTUBE_API_KEY is not configured."
+          "YOUTUBE_API_KEY is missing."
         );
 
         return res.json({
@@ -107,15 +117,14 @@ app.get(
       );
 
       const response =
-        await fetch(url.toString());
+        await fetch(
+          url.toString()
+        );
 
       if (!response.ok) {
-        const errorText =
-          await response.text();
-
         console.error(
-          "YouTube API error:",
-          errorText
+          "YouTube search failed:",
+          await response.text()
         );
 
         return res.json({
@@ -131,8 +140,7 @@ app.get(
           .map((item) => {
 
             const videoId =
-              item.id &&
-              item.id.videoId;
+              item.id?.videoId;
 
             if (!videoId) {
               return null;
@@ -149,7 +157,6 @@ app.get(
 
             return {
               id: `yt:${videoId}`,
-
               type: "movie",
 
               name:
@@ -157,7 +164,6 @@ app.get(
                 "YouTube Video",
 
               poster: thumbnail,
-
               background: thumbnail,
 
               description:
@@ -174,7 +180,12 @@ app.get(
 
               genres: [
                 "YouTube"
-              ]
+              ],
+
+              behaviorHints: {
+                defaultVideoId:
+                  videoId
+              }
             };
           })
           .filter(Boolean);
@@ -186,7 +197,7 @@ app.get(
     } catch (error) {
 
       console.error(
-        "Search error:",
+        "Catalog error:",
         error
       );
 
@@ -204,12 +215,15 @@ app.get(
 app.get(
   "/meta/:type/:id.json",
   async (req, res) => {
+
     try {
 
       let videoId =
         req.params.id;
 
-      if (videoId.startsWith("yt:")) {
+      if (
+        videoId.startsWith("yt:")
+      ) {
         videoId =
           videoId.substring(3);
       }
@@ -225,7 +239,7 @@ app.get(
 
       url.searchParams.set(
         "part",
-        "snippet"
+        "snippet,contentDetails"
       );
 
       url.searchParams.set(
@@ -239,7 +253,9 @@ app.get(
       );
 
       const response =
-        await fetch(url.toString());
+        await fetch(
+          url.toString()
+        );
 
       if (!response.ok) {
         return res.json({
@@ -251,8 +267,7 @@ app.get(
         await response.json();
 
       const video =
-        data.items &&
-        data.items[0];
+        data.items?.[0];
 
       if (!video) {
         return res.json({
@@ -280,7 +295,6 @@ app.get(
             "YouTube Video",
 
           poster: thumbnail,
-
           background: thumbnail,
 
           description:
@@ -302,10 +316,7 @@ app.get(
           director: [
             snippet.channelTitle ||
             "YouTube"
-          ],
-
-          website:
-            `https://www.youtube.com/watch?v=${videoId}`
+          ]
         }
       });
 
@@ -324,7 +335,58 @@ app.get(
 );
 
 // --------------------------------------------------
-// Health check
+// YouTube Stream
+// --------------------------------------------------
+
+app.get(
+  "/stream/:type/:id.json",
+  async (req, res) => {
+
+    try {
+
+      let videoId =
+        req.params.id;
+
+      if (
+        videoId.startsWith("yt:")
+      ) {
+        videoId =
+          videoId.substring(3);
+      }
+
+      if (!videoId) {
+        return res.json({
+          streams: []
+        });
+      }
+
+      return res.json({
+        streams: [
+          {
+            name: "YouTube",
+            title: "Watch on YouTube",
+            externalUrl:
+              `https://www.youtube.com/watch?v=${videoId}`
+          }
+        ]
+      });
+
+    } catch (error) {
+
+      console.error(
+        "Stream error:",
+        error
+      );
+
+      return res.json({
+        streams: []
+      });
+    }
+  }
+);
+
+// --------------------------------------------------
+// Health Check
 // --------------------------------------------------
 
 app.get("/", (req, res) => {
@@ -334,7 +396,7 @@ app.get("/", (req, res) => {
 });
 
 // --------------------------------------------------
-// Start server
+// Start
 // --------------------------------------------------
 
 app.listen(
